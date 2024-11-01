@@ -7,25 +7,20 @@ def connect_db(db: str):
     dir = parent / "db"
     file = dir / db
 
-    if not dir.exists():
-        dir.mkdir(parents=True, exist_ok=True)
-    
-    if not file.exists():
-        with sqlite3.connect(file) as conn:
-            print("Initialized database successfully!")
-    else:
-        conn = sqlite3.connect(file)
-            
+    dir.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(file)
+    print("Connected to the database successfully!")
     return conn
+
 def create_table(conn):
     cursor = conn.cursor()
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS anidb (
-        id INTEGER NOT NULL UNIQUE,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
-        cover INTEGER,
-        status INTEGER NOT NULL CHECK(status IN (1, 3)),
-        PRIMARY KEY(id AUTOINCREMENT)
+        cover TEXT,
+        status INTEGER NOT NULL CHECK(status IN (1, 2, 3))
     )
     ''')
     conn.commit()
@@ -36,18 +31,37 @@ def insert_data(conn, title: str, cover: Optional[str], status: int):
     INSERT INTO anidb (title, cover, status) VALUES (?, ?, ?)
     ''', (title, cover, status))
     conn.commit()
+    print("Anime added successfully!")
 
 def query_data(conn):
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM anidb')
     rows = cursor.fetchall()
-    for row in rows:
-        print(row)
+    
+    if rows:
+        for row in rows:
+            print(row)
+    else:
+        print("No anime found in the database.")
+
+def delete_data(conn, anime_id: int):
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM anidb WHERE id = ?', (anime_id,))
+    conn.commit()
+    if cursor.rowcount > 0:
+        print(f"Anime with ID {anime_id} deleted successfully!")
+    else:
+        print(f"No anime found with ID {anime_id}.")
 
 def dialog(conn):
     print("Welcome to anidb! What do you want to do?")
 
-    options = ["1. Get your anime list", "2. Insert new anime to the list"]
+    options = [
+        "1. Get your anime list",
+        "2. Insert new anime to the list",
+        "3. Delete an anime from the list"
+    ]
+
     for o in options:
         print(o)
     
@@ -56,14 +70,22 @@ def dialog(conn):
     if choice == "1":
         query_data(conn)
     elif choice == "2":
-        name = input("Anime title: ")
-        cover = input("Anime cover (url): ")
+        name = input("Anime title: ").strip()
+        cover = input("Anime cover (url) [Press enter to skip]: ").strip() or None
         status = input("Anime status (1 for releasing, 2 for completed, 3 for not yet released): ")
         try:
             status = int(status)
-            insert_data(conn, name, cover if cover else None, status)
+            if status not in [1, 2, 3]:
+                raise ValueError
+            insert_data(conn, name, cover, status)
         except ValueError:
-            print("Invalid status input. Please enter 1 or 3.")
+            print("Invalid input. Please ensure the status is 1, 2, or 3.")
+    elif choice == "3":
+        try:
+            anime_id = int(input("Enter the ID of the anime to delete: "))
+            delete_data(conn, anime_id)
+        except ValueError:
+            print("Invalid ID input. Please enter a numeric ID.")
     else:
         print("Oops! The only available options are 1 & 2.")
 
